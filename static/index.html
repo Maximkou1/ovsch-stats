@@ -1,0 +1,546 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>База ОВСЧ</title>
+
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+    <style>
+        body { background-color: #f4f7f9; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .sidebar { height: 100vh; overflow-y: auto; border-right: 1px solid #dee2e6; background: white; position: sticky; top: 0; }
+        .question-box { background: white; border-radius: 12px; padding: 25px; margin-bottom: 25px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        .answer-block { display: none; margin-top: 20px; padding-top: 20px; border-top: 1px dashed #ced4da; }
+        .btn-show-answer { color: #0d6efd; text-decoration: none; cursor: pointer; font-weight: 600; font-size: 0.9rem; }
+        .btn-show-answer:hover { text-decoration: underline; }
+        .stats-table { font-size: 0.85rem; max-height: 250px; overflow-y: auto; line-height: 1.6; }
+        .team-link { color: #0d6efd; cursor: pointer; text-decoration: none; font-weight: 500; }
+        .team-link:hover { text-decoration: underline; color: #0a58ca; }
+        .nav-tabs .nav-link { color: #495057; font-weight: 500; }
+        .nav-tabs .nav-link.active { font-weight: 700; color: #0d6efd; }
+        .suggestion-item { cursor: pointer; transition: background 0.2s; }
+        .suggestion-item:hover { background-color: #f8f9fa; }
+        .history-card {
+            transition: transform 0.2s;
+            border-left: 5px solid;
+        }
+        .history-card:hover {
+            transform: translateX(5px);
+        }
+        .question-text-full {
+            white-space: pre-wrap;
+            line-height: 1.5;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+
+<div class="container-fluid">
+    <div class="row">
+        <div class="col-md-3 sidebar p-3 shadow-sm">
+            <h5 class="mb-3 px-2">Меню</h5>
+
+            <div class="list-group list-group-flush mb-4 px-2">
+                <a href="javascript:void(0)" id="btn-nav-ovsch" class="list-group-item list-group-item-action border rounded-2 mb-2 py-3 active" onclick="showDashboard()">
+                    <i class="bi bi-house-door me-2"></i>🏆 Этапы ОВСЧ
+                </a>
+                <a href="javascript:void(0)" id="btn-nav-analytics" class="list-group-item list-group-item-action border rounded-2 mb-2 py-3" onclick="showGlobalAnalytics()">
+                    <i class="bi bi-bar-chart me-2"></i>📊 Аналитика по команде
+                </a>
+            </div>
+
+            <hr>
+
+            <div id="tournamentSidebarSection">
+                <h6 class="ps-2 text-muted text-uppercase small fw-bold mb-3">Выберите этап</h6>
+                <div id="tournamentList" class="list-group list-group-flush">
+                    </div>
+            </div>
+        </div>
+
+        <div class="col-md-9 p-4">
+            <div id="ovschSection">
+                <div id="mainHeader" class="mb-4">
+                    <h2 id="currentStageTitle" class="display-6">Добро пожаловать в базу вопросов ОВСЧ!</h2>
+                    <div id="typeSelector" class="mt-3 d-none">
+                        <div class="btn-group" role="group">
+                            <input type="radio" class="btn-check" name="tournType" id="typeSync" checked onclick="filterType('синхрон')">
+                            <label class="btn btn-outline-primary px-4" for="typeSync">🌐 Синхрон</label>
+
+                            <input type="radio" class="btn-check" name="tournType" id="typeAsync" onclick="filterType('асинхрон')">
+                            <label class="btn btn-outline-primary px-4" for="typeAsync">🕒 Асинхрон</label>
+                        </div>
+                    </div>
+                </div>
+
+                <ul class="nav nav-tabs d-none" id="tournTabs">
+                    <li class="nav-item">
+                        <a class="nav-link active" id="questions-tab" href="javascript:void(0)" onclick="switchTab('questions')">Вопросы и ответы</a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link" id="leaderboard-tab" href="javascript:void(0)" onclick="switchTab('leaderboard')">Лидерборд</a>
+                    </li>
+                </ul>
+
+                <div id="questionsContainer" class="mt-4"></div>
+                <div id="leaderboardContainer" class="mt-4 d-none">
+                    <div class="card border-0 shadow-sm">
+                        <div class="card-body p-0">
+                            <table class="table table-hover mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th class="ps-4">#</th>
+                                        <th>Команда</th>
+                                        <th>Город</th>
+                                        <th class="text-center">Взято</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="leaderboardBody"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="globalAnalyticsContainer" class="d-none">
+                <h2 class="display-6 mb-4">Аналитика по команде</h2>
+                <div class="row mb-5">
+                    <div class="col-md-6 position-relative">
+                        <label class="form-label text-muted small fw-bold">ПОИСК КОМАНДЫ</label>
+                        <input type="text" id="teamSearchInput" class="form-control form-control-lg shadow-sm" placeholder="Начните вводить название...">
+                        <div id="searchSuggestions" class="list-group shadow position-absolute w-100 mt-1" style="z-index: 1050;"></div>
+                    </div>
+                </div>
+
+                <div id="globalStatsContent" class="d-none">
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm text-center p-3 h-100">
+                                <div class="text-muted small text-uppercase fw-bold">Турниров сыграно</div>
+                                <div class="h2 mb-0 mt-2" id="stat-total-t">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm text-center p-3 h-100">
+                                <div class="text-muted small text-uppercase fw-bold">Точность</div>
+                                <div class="h2 mb-0 mt-2 text-primary" id="stat-accuracy">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm text-center p-3 h-100">
+                                <div class="text-muted small text-uppercase fw-bold">Среднее место</div>
+                                <div class="h2 mb-0 mt-2" id="stat-avg-rank">-</div>
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="card border-0 shadow-sm text-center p-3 h-100">
+                                <div class="text-muted small text-uppercase fw-bold">Лучшее / Худшее место</div>
+                                <div class="h2 mb-0 mt-2" id="stat-ranks">-</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="chartSection" class="card border-0 shadow-sm mb-4 d-none">
+                        <div class="card-body">
+                            <h5 class="card-title mb-4">Динамика взятых вопросов по этапам</h5>
+                            <div style="height: 300px;">
+                                <canvas id="teamPerformanceChart"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    <div id="teamQuestionsSection" class="mt-5 d-none">
+                        <h4 class="mb-3">История ответов</h4>
+                        <div class="mb-3">
+                            <div class="btn-group btn-group-sm">
+                                <button class="btn btn-outline-secondary active" onclick="filterHistory('all')">Все</button>
+                                <button class="btn btn-outline-success" onclick="filterHistory('correct')">Взятые</button>
+                                <button class="btn btn-outline-danger" onclick="filterHistory('wrong')">Невзятые</button>
+                            </div>
+                        </div>
+                        <div id="historyList" class="row g-3"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="teamModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-centered">
+    <div class="modal-content border-0 shadow-lg">
+      <div class="modal-header bg-light">
+        <h5 class="modal-title fw-bold" id="modalTeamName">Статистика команды</h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-4">
+        <div id="rosterBlock" class="mb-4 p-3 rounded-3 d-none" style="background-color: #e9ecef;">
+            <div class="text-uppercase text-muted small fw-bold mb-1">Состав на турнир:</div>
+            <div id="playerList" class="text-dark"></div>
+        </div>
+        <div style="position: relative; height:350px;">
+            <canvas id="teamChart"></canvas>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+    let currentTId = null;
+    let myChart = null;
+    let allTournaments = [];
+    let currentStage = null;
+    let currentType = 'синхрон';
+
+    // навигация
+    function showDashboard() {
+        document.getElementById('ovschSection').classList.remove('d-none');
+        document.getElementById('globalAnalyticsContainer').classList.add('d-none');
+        document.getElementById('tournamentSidebarSection').style.opacity = "1";
+        document.getElementById('tournamentSidebarSection').style.pointerEvents = "auto";
+
+        document.getElementById('btn-nav-ovsch').classList.add('active');
+        document.getElementById('btn-nav-analytics').classList.remove('active');
+    }
+
+    function showGlobalAnalytics() {
+        document.getElementById('ovschSection').classList.add('d-none');
+        document.getElementById('globalAnalyticsContainer').classList.remove('d-none');
+
+        document.getElementById('tournamentSidebarSection').style.opacity = "0.3";
+        document.getElementById('tournamentSidebarSection').style.pointerEvents = "none";
+
+        document.getElementById('btn-nav-analytics').classList.add('active');
+        document.getElementById('btn-nav-ovsch').classList.remove('active');
+
+        // снимаем выделение с этапов
+        document.querySelectorAll('#tournamentList .list-group-item').forEach(el => el.classList.remove('active'));
+    }
+
+    async function init() {
+        try {
+            const res = await fetch('/tournaments');
+            allTournaments = await res.json();
+            const stageNums = [...new Set(allTournaments.map(t => t.stage))].sort((a, b) => a - b);
+            const list = document.getElementById('tournamentList');
+            list.innerHTML = stageNums.map(num => `
+                <a href="javascript:void(0)" class="list-group-item list-group-item-action border-0 rounded-2 mb-2 py-3 shadow-sm"
+                   onclick="selectStage(${num})" id="stage-btn-${num}">
+                    <span class="fw-bold">Этап ${num}</span>
+                </a>
+            `).join('');
+        } catch (e) { console.error(e); }
+    }
+
+    function selectStage(num) {
+        showDashboard();
+        currentStage = num;
+
+        document.querySelectorAll('#tournamentList .list-group-item').forEach(el => el.classList.remove('active'));
+        const activeBtn = document.getElementById(`stage-btn-${num}`);
+        if(activeBtn) activeBtn.classList.add('active');
+
+        document.getElementById('currentStageTitle').innerText = `ОВСЧ 2024/2025. Этап ${num}`;
+        document.getElementById('typeSelector').classList.remove('d-none');
+        document.getElementById('tournTabs').classList.remove('d-none');
+        filterType(currentType);
+    }
+    async function filterType(type) {
+        currentType = type;
+        const tournament = allTournaments.find(t =>
+            t.stage === currentStage &&
+            (type === 'асинхрон' ? t.title.toLowerCase().includes('асинхрон') : !t.title.toLowerCase().includes('асинхрон'))
+        );
+
+        if (tournament) {
+            currentTId = tournament.id;
+            const activeTab = document.getElementById('questions-tab').classList.contains('active') ? 'questions' : 'leaderboard';
+            if (activeTab === 'questions') await loadQuestions();
+            else await loadLeaderboard();
+        } else {
+            document.getElementById('questionsContainer').innerHTML = '<div class="alert alert-warning">Турнир не найден.</div>';
+        }
+    }
+
+    async function loadQuestions() {
+        const res = await fetch(`/tournament/${currentTId}/questions`);
+        const questions = await res.json();
+        const container = document.getElementById('questionsContainer');
+        container.innerHTML = questions.map(q => `
+            <div class="question-box">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <span class="badge bg-secondary px-3 py-2">Вопрос ${q.number}</span>
+                    <small class="text-muted fw-bold">✍️ ${q.author || '—'}</small>
+                </div>
+                <div class="lead mb-3">${q.text}</div>
+                <a class="btn-show-answer d-inline-block" onclick="toggleAnswer('${q.uid}')">Ответ и статистика ▼</a>
+                   <div id="ans-${q.uid}" class="answer-block">
+                    <div class="p-3 bg-light rounded-3 mb-4 shadow-sm border">
+                        <strong class="d-block mb-1 text-uppercase small text-muted">Ответ:</strong>
+                        <span class="fs-5">${q.answer}</span>
+                    </div>
+                    <div id="stats-${q.uid}"><div class="spinner-border spinner-border-sm text-secondary"></div></div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    function switchTab(tab) {
+        const qTab = document.getElementById('questions-tab'), lTab = document.getElementById('leaderboard-tab');
+        const qCont = document.getElementById('questionsContainer'), lCont = document.getElementById('leaderboardContainer');
+        if (tab === 'questions') {
+            qCont.classList.remove('d-none'); lCont.classList.add('d-none');
+            qTab.classList.add('active'); lTab.classList.remove('active');
+            loadQuestions();
+        } else {
+            qCont.classList.add('d-none'); lCont.classList.remove('d-none');
+            qTab.classList.remove('active'); lTab.classList.add('active');
+            loadLeaderboard();
+        }
+    }
+
+    async function toggleAnswer(uid) {
+        const block = document.getElementById(`ans-${uid}`);
+        if (block.style.display === 'block') block.style.display = 'none';
+        else { block.style.display = 'block'; loadStats(uid); }
+    }
+
+    async function loadStats(uid) {
+        const statsDiv = document.getElementById(`stats-${uid}`);
+        const res = await fetch(`/question/${uid}?t_id=${currentTId}`);
+        const data = await res.json();
+        const teamLink = (id, name) => `<span class="team-link" onclick="showTeamStats('${id}', '${name.replace(/'/g, "\\'")}')">${name}</span>`;
+        const ok = data.results.filter(r => r.correct), fail = data.results.filter(r => !r.correct);
+
+        statsDiv.innerHTML = `
+            <div class="mb-4 text-center">
+                 <span class="badge rounded-pill bg-primary px-4 py-2 fs-6 shadow-sm">Сложность: ${data.stats.accuracy_percent}%</span>
+            </div>
+            <div class="row g-4">
+                <div class="col-md-6 border-end">
+                    <h6 class="text-success fw-bold mb-3">✅ Взяли (${ok.length}):</h6>
+                    <div class="stats-table">${ok.map(t => teamLink(t.team_id, t.team)).join(', ') || '—'}</div>
+                </div>
+                <div class="col-md-6">
+                    <h6 class="text-danger fw-bold mb-3">❌ Не взяли (${fail.length}):</h6>
+                    <div class="stats-table">${fail.map(t => teamLink(t.team_id, t.team)).join(', ') || '—'}</div>
+                </div>
+            </div>`;
+    }
+
+    async function loadLeaderboard() {
+        const tbody = document.getElementById('leaderboardBody');
+        tbody.innerHTML = '<tr><td colspan="4" class="text-center p-5"><div class="spinner-border text-primary"></div></td></tr>';
+        const res = await fetch(`/tournament/${currentTId}/leaderboard`);
+        const data = await res.json();
+        tbody.innerHTML = data.map((row, index) => `
+            <tr>
+                <td class="ps-4 fw-bold text-muted">${index + 1}</td>
+                <td><span class="team-link" onclick="showTeamStats('${row.team_id}', '${row.team.replace(/'/g, "\\'")}')">${row.team}</span></td>
+                <td>${row.city || '—'}</td>
+                <td class="text-center"><span class="badge bg-dark fs-6 px-3">${row.score}</span></td>
+            </tr>`).join('');
+    }
+
+    async function showTeamStats(teamId, teamName) {
+        if (!currentTId) return;
+        document.getElementById('modalTeamName').innerText = `Команда: ${teamName}`;
+        new bootstrap.Modal(document.getElementById('teamModal')).show();
+        const [sRes, rRes] = await Promise.all([fetch(`/team_stats/${teamId}/${currentTId}`), fetch(`/team/${teamId}/roster/${currentTId}`)]);
+        const sData = await sRes.json(), rData = await rRes.json();
+
+        const rb = document.getElementById('rosterBlock');
+        if (rData.length > 0) { rb.classList.remove('d-none'); document.getElementById('playerList').innerText = rData.map(p => p.name).join(', '); }
+        else rb.classList.add('d-none');
+
+        const ctx = document.getElementById('teamChart').getContext('2d');
+        if (myChart) myChart.destroy();
+        myChart = new Chart(ctx, {
+            type: 'bar',
+            data: {
+                labels: sData.map(d => `${d.num}`),
+                datasets: [{
+                    label: 'Взято', data: sData.map(d => d.team_result),
+                    backgroundColor: 'rgba(25, 135, 84, 0.6)',
+                    borderRadius: 4, order: 2
+                }, {
+                    label: 'Среднее %', data: sData.map(d => d.avg_accuracy),
+                    type: 'line', borderColor: '#0d6efd', borderWidth: 2, pointRadius: 3, order: 1, tension: 0.3
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                scales: {
+                    y: { beginAtZero: true, max: 100, grid: { color: 'rgba(0,0,0,0.05)' } },
+                    x: { grid: { offset: false }, ticks: { autoSkip: false, font: { size: 10 } } }
+                },
+                plugins: { legend: { position: 'bottom' }, tooltip: { mode: 'index', intersect: false } }
+            }
+        });
+    }
+
+    // логика глобального поиска
+    let searchTimeout;
+    document.getElementById('teamSearchInput').addEventListener('input', (e) => {
+        clearTimeout(searchTimeout);
+        const val = e.target.value;
+        if (val.length < 2) { document.getElementById('searchSuggestions').innerHTML = ''; return; }
+        searchTimeout = setTimeout(async () => {
+            const res = await fetch(`/search_teams?q=${encodeURIComponent(val)}`);
+            const teams = await res.json();
+            const sugg = document.getElementById('searchSuggestions');
+            sugg.innerHTML = teams.map(t => {
+                const safeName = t.name.replace(/'/g, "\\'");
+                return `
+                    <button class="list-group-item list-group-item-action suggestion-item"
+                            onclick="loadGlobalTeamStats('${t.id}', '${safeName}')">
+                        <div class="fw-bold">${t.name}</div>
+                        <small class="text-muted">${t.city || 'Город не указан'}</small>
+                    </button>`;
+            }).join('');
+        }, 300);
+    });
+
+    let teamChart = null;
+
+    async function loadGlobalTeamStats(id, name) {
+        document.getElementById('searchSuggestions').innerHTML = '';
+        document.getElementById('teamSearchInput').value = name;
+
+        const [statsRes, historyRes, chartRes] = await Promise.all([
+            fetch(`/team_global_stats/${id}`),
+            fetch(`/team_questions_history/${id}`),
+            fetch(`/team_chart_stats/${id}`)
+        ]);
+
+        const stats = await statsRes.json();
+        const historyData = await historyRes.json();
+        const chartData = await chartRes.json();
+
+        document.getElementById('globalStatsContent').classList.remove('d-none');
+
+        const cityText = stats.city ? ` (${stats.city})` : '';
+        document.querySelector('#globalAnalyticsContainer h2').innerText = `Аналитика: ${stats.name}${cityText}`;
+
+        const rosterHtml = stats.roster && stats.roster.length > 0
+            ? `<div class="mb-4 p-3 rounded-3" style="background-color: #e9ecef;">
+                   <div class="text-uppercase text-muted small fw-bold mb-1">Состав:</div>
+                   <div class="text-dark">${stats.roster.join(', ')}</div>
+               </div>`
+            : '';
+
+        // список игроков перед карточками статистики
+        const statsRow = document.querySelector('#globalStatsContent .row.g-4');
+        let rosterContainer = document.getElementById('globalRosterInfo');
+        if (!rosterContainer) {
+            rosterContainer = document.createElement('div');
+            rosterContainer.id = 'globalRosterInfo';
+            statsRow.parentNode.insertBefore(rosterContainer, statsRow);
+        }
+        rosterContainer.innerHTML = rosterHtml
+
+        // отображаем карточки
+        document.getElementById('globalStatsContent').classList.remove('d-none');
+        document.getElementById('stat-total-t').innerText = stats.total_tournaments || 0;
+        document.getElementById('stat-accuracy').innerText = (stats.accuracy || 0) + '%';
+        document.getElementById('stat-avg-rank').innerText = stats.avg_rank ? stats.avg_rank.toFixed(1) : '-';
+        document.getElementById('stat-ranks').innerText = `${stats.best_rank || '-' } / ${stats.worst_rank || '-'}`;
+
+        // показываем историю
+        document.getElementById('chartSection').classList.remove('d-none');
+        renderTeamChart(chartData);
+
+        renderHistory(historyData);
+    }
+
+    function renderTeamChart(data) {
+        const ctx = document.getElementById('teamPerformanceChart').getContext('2d');
+
+        // если график уже существует, уничтожаем его перед созданием нового
+        if (teamChart) {
+            teamChart.destroy();
+        }
+
+        teamChart = new Chart(ctx, {
+            type: 'line', // Линейный график
+            data: {
+                labels: data.map(d => d.stage_title), // Названия этапов
+                datasets: [{
+                    label: 'Взятые вопросы',
+                    data: data.map(d => d.correct_count),
+                    borderColor: '#198754', // Цвет линии (success)
+                    backgroundColor: 'rgba(25, 135, 84, 0.1)',
+                    borderWidth: 3,
+                    tension: 0.3, // Сглаживание линии
+                    fill: true,
+                    pointRadius: 5,
+                    pointBackgroundColor: '#198754'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    y: {
+                        beginAtZero: true,
+                        max: 36, // Максимум вопросов в турнире ОВСЧ
+                        ticks: { stepSize: 6 }
+                    }
+                },
+                plugins: {
+                    legend: { display: false } // Скроем легенду для чистоты
+                }
+            }
+        });
+    }
+
+    // отрисовка списка вопросов
+    function renderHistory(items) {
+        const container = document.getElementById('historyList');
+
+        const section = document.getElementById('teamQuestionsSection');
+        if (section) section.classList.remove('d-none');
+
+        container.innerHTML = items.map(q => `
+            <div class="col-12 history-item" data-correct="${q.is_correct}">
+                <div class="card border-0 shadow-sm mb-3 border-start border-4 ${q.is_correct ? 'border-success' : 'border-danger'}">
+                    <div class="card-body">
+                        <div class="d-flex justify-content-between align-items-center mb-2">
+                            <small class="text-muted fw-bold">${q.tournament} — Вопрос ${q.number}</small>
+                            <span class="badge ${q.is_correct ? 'bg-success' : 'bg-danger'}">
+                                ${q.is_correct ? 'Взят' : 'Не взят'}
+                            </span>
+                        </div>
+                        <p class="mb-2" style="white-space: pre-wrap;">${q.text}</p>
+                        <div class="p-2 bg-light rounded small">
+                            <strong>Ответ:</strong> ${q.answer}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    // фильтрация истории (взятые/невзятые)
+    function filterHistory(type) {
+        const items = document.querySelectorAll('.history-item');
+
+        event.target.parentElement.querySelectorAll('.btn').forEach(b => b.classList.remove('active'));
+        event.target.classList.add('active');
+
+        items.forEach(item => {
+            const isCorrect = item.getAttribute('data-correct') === 'true';
+            if (type === 'all') item.classList.remove('d-none');
+            else if (type === 'correct') isCorrect ? item.classList.remove('d-none') : item.classList.add('d-none');
+            else if (type === 'wrong') !isCorrect ? item.classList.remove('d-none') : item.classList.add('d-none');
+        });
+    }
+
+    init();
+</script>
+</body>
+</html>
