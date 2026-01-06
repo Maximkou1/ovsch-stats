@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  db:
+    image: neo4j:latest
+    container_name: ovsch_db
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+    ports:
+      - "7474:7474" # HTTP
+      - "7687:7687" # Bolt протокол
+    volumes:
+      - neo4j_data:/data
+    healthcheck:
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "${NEO4J_PASSWORD}", "RETURN 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s # время, чтобы бд скачалась
+
+  db_loader:
+    image: ermaxim/ovsch_stats:latest
+    # build: .
+    container_name: ovsch_loader
+    command: python loader.py
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - NEO4J_URI=bolt://db:7687
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+
+  web:
+    image: ermaxim/ovsch_stats:latest
+    # build: .
+    container_name: ovsch_app
+    ports:
+      - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      - NEO4J_URI=bolt://db:7687
+      - NEO4J_PASSWORD=${NEO4J_PASSWORD}
+
+volumes:
+  neo4j_data:
